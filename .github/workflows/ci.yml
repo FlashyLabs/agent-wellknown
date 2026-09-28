@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # No install step, on purpose. This repository declares no dependencies
+      # and the checker imports nothing but node: builtins; a check that needs
+      # an install is a check that can quietly not run.
+      - run: npm run lint
+      - run: npm test

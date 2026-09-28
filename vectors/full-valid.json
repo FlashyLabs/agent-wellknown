@@ -1,0 +1,50 @@
+{
+  "contract": "agent/1",
+  "domain": "example.com",
+  "org": "org/example",
+  "accountable": { "name": "Ada Example", "email": "ada@example.com" },
+  "updated": "2026-09-28",
+  "capabilities": [
+    {
+      "id": "quote",
+      "description": "Price a job from a structured brief. Free; returns a quote id.",
+      "method": "POST",
+      "endpoint": "https://api.example.com/agent/quote",
+      "schema": "https://api.example.com/agent/quote.schema.json"
+    },
+    {
+      "id": "book",
+      "description": "Book a quoted job. Charged per booking.",
+      "method": "POST",
+      "endpoint": "https://api.example.com/agent/book",
+      "schema": "https://api.example.com/agent/book.schema.json",
+      "price": { "amount": 2500, "currency": "GBP", "per": "booking" }
+    },
+    {
+      "id": "refund",
+      "description": "Refund a booking within the policy window.",
+      "method": "POST",
+      "endpoint": "https://api.example.com/agent/refund",
+      "schema": "https://api.example.com/agent/refund.schema.json",
+      "price": { "amount": 0, "currency": "GBP" }
+    }
+  ],
+  "auth": [
+    { "method": "delegation/1", "issuer": "https://id.example.com", "scopes": ["agent:quote", "agent:book", "agent:refund"], "detail": "A delegation chain rooted in a person or organisation this domain recognises." },
+    { "method": "api-key", "detail": "Issued on request to the accountable human." }
+  ],
+  "payment": [
+    { "method": "card", "currencies": ["GBP", "EUR"], "terms": "https://example.com/terms" },
+    { "method": "invoice", "currencies": ["GBP"], "detail": "Net 30, organisations only." }
+  ],
+  "policies": {
+    "rateLimit": { "requests": 60, "per": "minute" },
+    "jurisdictions": ["GB", "IE"],
+    "humanApprovalAtOrAbove": { "amount": 50000, "currency": "GBP" },
+    "humanApprovalFor": ["refund"],
+    "terms": "https://example.com/agent/policies"
+  },
+  "handshake": "https://example.com/.well-known/flashyos.json",
+  "frontdoor": "https://example.com/.well-known/frontdoor.json",
+  "x-vendor-note": "Extension keys are carried and never checked."
+}

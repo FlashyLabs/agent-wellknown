@@ -1,0 +1,16 @@
+{
+  "contract": "agent/1",
+  "domain": "example.com",
+  "org": "org/example",
+  "accountable": { "name": "Ada Example", "email": "ada@example.com" },
+  "updated": "2026-09-28",
+  "capabilities": [
+    {
+      "id": "book",
+      "endpoint": "https://example.com/agent/book",
+      "schema": "https://example.com/agent/book.schema.json",
+      "price": { "amount": 2500, "currency": "GBP" }
+    }
+  ],
+  "auth": [{ "method": "none" }]
+}

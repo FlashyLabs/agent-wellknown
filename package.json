@@ -1,0 +1,15 @@
+{
+  "name": "@flashylabs/agent-wellknown",
+  "version": "0.0.0",
+  "private": true,
+  "description": "agent/1 — the vendor-neutral discovery document at /.well-known/agent: how a website exposes an authenticated, discoverable, payable machine interface to agents.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "lint": "node scripts/lint.mjs",
+    "check": "node vendor-agent.mjs check vectors/minimal-valid.json"
+  }
+}

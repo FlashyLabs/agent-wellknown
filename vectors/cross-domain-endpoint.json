@@ -1,0 +1,15 @@
+{
+  "contract": "agent/1",
+  "domain": "example.com",
+  "org": "org/example",
+  "accountable": { "name": "Ada Example", "email": "ada@example.com" },
+  "updated": "2026-09-28",
+  "capabilities": [
+    {
+      "id": "quote",
+      "endpoint": "https://api.other-company.example/agent/quote",
+      "schema": "https://example.com/agent/quote.schema.json"
+    }
+  ],
+  "auth": [{ "method": "none" }]
+}
