@@ -9,7 +9,8 @@ import { spawnSync } from 'node:child_process'
 import {
   validate,
   fetchDocument,
-  registrableDomain,
+  isSameDomain,
+  sameDomainUrl,
   redirectAllowed,
   parseHttpsUrl,
   isHostname,
@@ -18,9 +19,10 @@ import {
   REQUIRED_KEYS,
   DEPARTMENTS,
   CAPABILITY_TOKEN,
-  WELL_KNOWN_PATHS,
+  WELL_KNOWN_PATH,
   FETCH_DEFAULTS,
 } from '../vendor-agent.mjs'
+import * as domainRule from '../vendor-domain.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const VECTORS = join(ROOT, 'vectors')
@@ -200,13 +202,58 @@ test('an endpoint is required, https, and free of userinfo, ports and IP literal
   }
 })
 
-test('an endpoint on another registrable domain is refused; a subdomain of our own is not', () => {
+test('an endpoint on the document\'s domain or a subdomain of it is valid', () => {
   const d = minimal()
+  d.capabilities[0].endpoint = 'https://example.com/agent/quote'
+  assert.equal(validate(d).valid, true)
   d.capabilities[0].endpoint = 'https://api.example.com/agent/quote'
   assert.equal(validate(d).valid, true)
+  d.capabilities[0].endpoint = 'https://eu.api.example.com/agent/quote'
+  assert.equal(validate(d).valid, true)
+  // acme.example → api.acme.example, the case the task is named for
+  d.domain = 'acme.example'
+  d.accountable.email = 'ada@acme.example'
+  d.capabilities[0].endpoint = 'https://api.acme.example/agent/quote'
+  assert.equal(validate(d).valid, true)
+})
+
+test('acme.co.uk may point at www.acme.co.uk — a subdomain is a subdomain whatever the suffix', () => {
+  const d = minimal()
+  d.domain = 'acme.co.uk'
+  d.accountable.email = 'ada@acme.co.uk'
+  d.capabilities[0].endpoint = 'https://www.acme.co.uk/agent/quote'
+  assert.equal(validate(d).valid, true)
+})
+
+test('an endpoint on another domain, a parent domain, a sibling or a lookalike is refused as cross-domain-endpoint', () => {
+  const d = minimal()
+  d.capabilities[0].endpoint = 'https://other.example/agent/quote'
+  assert.deepEqual(rules(d), ['cross-domain-endpoint'])
   d.capabilities[0].endpoint = 'https://example.net/agent/quote'
   assert.deepEqual(rules(d), ['cross-domain-endpoint'])
   d.capabilities[0].endpoint = 'https://example.com.evil.example/agent/quote'
+  assert.deepEqual(rules(d), ['cross-domain-endpoint'])
+  d.capabilities[0].endpoint = 'https://notexample.com/agent/quote'
+  assert.deepEqual(rules(d), ['cross-domain-endpoint'])
+
+  // A parent: the document speaks for shop.example.com and may not send agents up to example.com.
+  const shop = minimal()
+  shop.domain = 'shop.example.com'
+  shop.capabilities[0].endpoint = 'https://example.com/agent/quote'
+  assert.deepEqual(rules(shop), ['cross-domain-endpoint'])
+
+  // A sibling: shop.example.com may not point at api.example.com either — that is the parent's document to publish.
+  shop.capabilities[0].endpoint = 'https://api.example.com/agent/quote'
+  assert.deepEqual(rules(shop), ['cross-domain-endpoint'])
+})
+
+test('acme.co.uk may NOT point at other.co.uk — the checker does not guess that co.uk is a suffix', () => {
+  const d = minimal()
+  d.domain = 'acme.co.uk'
+  d.accountable.email = 'ada@acme.co.uk'
+  d.capabilities[0].endpoint = 'https://other.co.uk/agent/quote'
+  assert.deepEqual(rules(d), ['cross-domain-endpoint'])
+  d.capabilities[0].endpoint = 'https://co.uk/agent/quote'
   assert.deepEqual(rules(d), ['cross-domain-endpoint'])
 })
 
@@ -215,6 +262,10 @@ test('the handshake and frontdoor links are the organisation\'s own', () => {
   d.handshake = 'https://other.example/.well-known/flashyos.json'
   d.frontdoor = 'http://example.com/.well-known/frontdoor.json'
   assert.deepEqual(rules(d).sort(), ['bad-field', 'cross-domain-endpoint'])
+  const e = minimal()
+  e.handshake = 'https://mesh.example.com/.well-known/flashyos.json'
+  e.frontdoor = 'https://example.com/.well-known/frontdoor.json'
+  assert.equal(validate(e).valid, true)
 })
 
 test('a schema link is required and must be https', () => {
@@ -292,29 +343,44 @@ test('policies: rate limits, jurisdictions and approval thresholds are typed', (
   assert.deepEqual(rules(d), ['approval-unknown-capability'])
 })
 
-test('a document fetched from one host may not speak for another', () => {
+test('a document fetched for one domain may speak for that domain or a subdomain of it, never a parent or a stranger', () => {
   const d = minimal()
-  assert.equal(validate(d, { domain: 'www.example.com' }).valid, true)
+  assert.equal(validate(d, { domain: 'example.com' }).valid, true)
+  assert.equal(validate(d, { domain: 'EXAMPLE.COM.' }).valid, true)
   assert.deepEqual(rules(d, { domain: 'other.example' }), ['domain-mismatch'])
+  // Served for www.example.com but claiming example.com — a subdomain speaking for its parent.
+  assert.deepEqual(rules(d, { domain: 'www.example.com' }), ['domain-mismatch'])
+  // The consumer asked for example.com and was redirected to www; the document says www. Fine.
+  const www = minimal()
+  www.domain = 'www.example.com'
+  www.capabilities[0].endpoint = 'https://www.example.com/agent/quote'
+  assert.equal(validate(www, { domain: 'example.com' }).valid, true)
 })
 
 // ---------------------------------------------------------------------------
-// The registrable-domain rule, stated exactly
+// The same-domain rule — vendored from agent-dns, re-exported, never restated
 // ---------------------------------------------------------------------------
 
-test('registrableDomain: two labels by default, three under a known second-level suffix of a two-letter country code', () => {
-  assert.equal(registrableDomain('example.com'), 'example.com')
-  assert.equal(registrableDomain('api.example.com'), 'example.com')
-  assert.equal(registrableDomain('a.b.c.example.com'), 'example.com')
-  assert.equal(registrableDomain('shop.example.co.uk'), 'example.co.uk')
-  assert.equal(registrableDomain('example.co.uk'), 'example.co.uk')
-  assert.equal(registrableDomain('example.com.au'), 'example.com.au')
-  assert.equal(registrableDomain('co.uk'), 'co.uk')
-  assert.equal(registrableDomain('API.Example.COM.'), 'example.com')
-  assert.equal(registrableDomain('192.0.2.1'), null)
-  assert.equal(registrableDomain('localhost'), null)
-  assert.equal(registrableDomain(''), null)
-  assert.equal(registrableDomain(undefined), null)
+test('the checker re-exports the vendored rule and does not define its own', () => {
+  assert.equal(isSameDomain, domainRule.isSameDomain)
+  assert.equal(sameDomainUrl, domainRule.sameDomainUrl)
+  const src = readFileSync(join(ROOT, 'vendor-agent.mjs'), 'utf8')
+  assert.doesNotMatch(src, /registrableDomain|MULTI_LABEL_SLDS|slice\(-[23]\)/, 'the label-slice rule is gone')
+  assert.match(src, /from '\.\/vendor-domain\.mjs'/)
+})
+
+test('isSameDomain: the host itself or a subdomain; a parent, a sibling and a co.uk neighbour are refused', () => {
+  assert.equal(isSameDomain('example.com', 'example.com'), true)
+  assert.equal(isSameDomain('api.example.com', 'example.com'), true)
+  assert.equal(isSameDomain('a.b.c.example.com', 'example.com'), true)
+  assert.equal(isSameDomain('API.Example.COM.', 'example.com'), true)
+  assert.equal(isSameDomain('www.acme.co.uk', 'acme.co.uk'), true)
+  assert.equal(isSameDomain('example.com', 'shop.example.com'), false)
+  assert.equal(isSameDomain('api.example.com', 'shop.example.com'), false)
+  assert.equal(isSameDomain('other.co.uk', 'acme.co.uk'), false)
+  assert.equal(isSameDomain('192.0.2.1', 'example.com'), false)
+  assert.equal(isSameDomain('', 'example.com'), false)
+  assert.equal(isSameDomain(undefined, 'example.com'), false)
 })
 
 test('isHostname and parseHttpsUrl agree with the validator', () => {
@@ -345,15 +411,20 @@ const fakeFetch = (routes) => {
   return f
 }
 
-test('the consumer looks at /.well-known/agent first and /.well-known/agent.json second', async () => {
-  assert.deepEqual([...WELL_KNOWN_PATHS], ['/.well-known/agent', '/.well-known/agent.json'])
-  const f = fakeFetch({ 'https://example.com/.well-known/agent.json': () => json(minimal()) })
+test('the consumer looks at /.well-known/agent and nowhere else — a .json spelling is not an alternate', async () => {
+  assert.equal(WELL_KNOWN_PATH, '/.well-known/agent')
+  const f = fakeFetch({ 'https://example.com/.well-known/agent': () => json(minimal()) })
   const r = await fetchDocument('example.com', { fetch: f })
   assert.equal(r.finding, 'found')
   assert.equal(r.valid, true)
-  assert.deepEqual(f.calls.map((c) => c.url), ['https://example.com/.well-known/agent', 'https://example.com/.well-known/agent.json'])
+  assert.deepEqual(f.calls.map((c) => c.url), ['https://example.com/.well-known/agent'])
   assert.equal(f.calls[0].init.redirect, 'manual')
   assert.ok(f.calls[0].init.signal instanceof AbortSignal)
+
+  const onlyJson = fakeFetch({ 'https://example.com/.well-known/agent.json': () => json(minimal()) })
+  const r2 = await fetchDocument('example.com', { fetch: onlyJson })
+  assert.equal(r2.finding, 'absent')
+  assert.deepEqual(onlyJson.calls.map((c) => c.url), ['https://example.com/.well-known/agent'], 'the .json path is never requested')
 })
 
 test('a found document that fails validation is found AND invalid — the two are separate answers', async () => {
@@ -364,7 +435,7 @@ test('a found document that fails validation is found AND invalid — the two ar
   assert.deepEqual(r.errors.map((e) => e.rule), ['http-endpoint'])
 })
 
-test('absent: both paths answered 404 — the host has no agent interface', async () => {
+test('absent: the path answered 404 — the host has no agent interface', async () => {
   const r = await fetchDocument('example.com', { fetch: fakeFetch({}) })
   assert.equal(r.finding, 'absent')
   assert.equal(r.status, 404)
@@ -384,7 +455,7 @@ test('a timeout is unreachable and names the budget', async () => {
   assert.match(r.reason, /1234ms/)
 })
 
-test('a redirect within the registrable domain is followed; one that leaves it is refused, not followed', async () => {
+test('a redirect to the fetched domain or a subdomain of it is followed; one that leaves it is refused, not followed', async () => {
   const good = fakeFetch({
     'https://example.com/.well-known/agent': () => status(301, { location: 'https://www.example.com/.well-known/agent' }),
     'https://www.example.com/.well-known/agent': () => json(minimal()),
@@ -393,10 +464,26 @@ test('a redirect within the registrable domain is followed; one that leaves it i
   assert.equal(r1.finding, 'found')
   assert.equal(r1.url, 'https://www.example.com/.well-known/agent')
 
+  // Two hops, each measured against the FETCHED domain, not the previous hop: api → www is a sibling
+  // of api but both are under example.com, so both are followed.
+  const twoHops = fakeFetch({
+    'https://example.com/.well-known/agent': () => status(301, { location: 'https://api.example.com/.well-known/agent' }),
+    'https://api.example.com/.well-known/agent': () => status(301, { location: 'https://www.example.com/.well-known/agent' }),
+    'https://www.example.com/.well-known/agent': () => json(minimal()),
+  })
+  const r1b = await fetchDocument('example.com', { fetch: twoHops })
+  assert.equal(r1b.finding, 'found')
+
   const bad = fakeFetch({ 'https://example.com/.well-known/agent': () => status(302, { location: 'https://other.example/.well-known/agent' }) })
   const r2 = await fetchDocument('example.com', { fetch: bad })
   assert.equal(r2.finding, 'refused')
   assert.equal(bad.calls.length, 1, 'the off-domain location must never be fetched')
+
+  // A parent is off-domain too: the consumer asked shop.example.com and is not sent up to example.com.
+  const parent = fakeFetch({ 'https://shop.example.com/.well-known/agent': () => status(302, { location: 'https://example.com/.well-known/agent' }) })
+  const r2b = await fetchDocument('shop.example.com', { fetch: parent })
+  assert.equal(r2b.finding, 'refused')
+  assert.equal(parent.calls.length, 1, 'the parent must never be fetched')
 
   const downgrade = fakeFetch({ 'https://example.com/.well-known/agent': () => status(307, { location: 'http://example.com/.well-known/agent' }) })
   const r3 = await fetchDocument('example.com', { fetch: downgrade })
@@ -407,9 +494,15 @@ test('a redirect within the registrable domain is followed; one that leaves it i
 test('redirectAllowed states the rule on its own', () => {
   assert.equal(redirectAllowed('https://example.com/a', '/b'), true)
   assert.equal(redirectAllowed('https://example.com/a', 'https://api.example.com/b'), true)
+  assert.equal(redirectAllowed('https://acme.co.uk/a', 'https://www.acme.co.uk/b'), true)
+  assert.equal(redirectAllowed('https://acme.co.uk/a', 'https://other.co.uk/b'), false)
+  assert.equal(redirectAllowed('https://www.example.com/a', 'https://example.com/b'), false, 'a parent is refused')
   assert.equal(redirectAllowed('https://example.com/a', 'https://example.org/b'), false)
   assert.equal(redirectAllowed('https://example.com/a', 'http://example.com/b'), false)
   assert.equal(redirectAllowed('https://example.com/a', 'https://example.com:8443/b'), false)
+  // With the fetched domain given, the hop is measured against it rather than against `from`.
+  assert.equal(redirectAllowed('https://api.example.com/a', 'https://www.example.com/b', 'example.com'), true)
+  assert.equal(redirectAllowed('https://api.example.com/a', 'https://www.example.com/b'), false)
   // A relative location resolves against the base and stays on the host, so it is followed.
   assert.equal(redirectAllowed('https://example.com/a', '::odd but relative::'), true)
   // An unparseable location is refused.

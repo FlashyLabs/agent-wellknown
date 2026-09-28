@@ -1,6 +1,6 @@
 {
   "contract": "agent/1",
-  "domain": "shop.example.co.uk",
+  "domain": "example.co.uk",
   "org": "org/example-shop",
   "accountable": { "name": "Bob Example", "email": "bob@example.co.uk" },
   "updated": "2026-09-28",
@@ -9,7 +9,13 @@
       "id": "check-stock",
       "endpoint": "https://api.example.co.uk/v1/stock",
       "schema": "https://api.example.co.uk/v1/stock.schema.json"
+    },
+    {
+      "id": "reserve",
+      "endpoint": "https://www.example.co.uk/v1/reserve",
+      "schema": "https://www.example.co.uk/v1/reserve.schema.json"
     }
   ],
-  "auth": [{ "method": "api-key" }]
+  "auth": [{ "method": "api-key" }],
+  "handshake": "https://mesh.shop.example.co.uk/.well-known/flashyos.json"
 }

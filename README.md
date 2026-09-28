@@ -28,9 +28,10 @@ exits 1. The third runs the whole suite with no install: this repository
 declares no dependencies and imports nothing but `node:` builtins.
 
 `node vendor-agent.mjs fetch <domain>` fetches a live document the way a
-stranger would — https only, a timeout, a size cap, redirects only within the
-same registrable domain — and tells `absent` (the host answered 404) apart
-from `unreachable` (the host did not answer).
+stranger would — https only, one path (`/.well-known/agent`, no `.json`
+alternate), a timeout, a size cap, redirects only to the domain asked for or a
+subdomain of it — and tells `absent` (the host answered 404) apart from
+`unreachable` (the host did not answer).
 
 ## What makes it different
 
@@ -39,10 +40,15 @@ from `unreachable` (the host did not answer).
 tells it what it can do. The id rule is `^[a-z][a-z0-9-]*$` plus a denylist of
 eight department words, and both are refused by name rather than by taste.
 
-**Endpoints stay on the organisation's own domain.** Every endpoint must share
-the document's registrable domain. A document may not point agents at another
-company's endpoints, whatever the arrangement between them; the other company
-publishes its own document.
+**Endpoints stay on the organisation's own domain.** Every endpoint's host must
+be the document's `domain` or a subdomain of it — never a parent, a sibling or
+a stranger. A document may not point agents at another company's endpoints,
+whatever the arrangement between them; the other company publishes its own
+document. The rule is deliberately not "same registrable domain": there is no
+Public Suffix List here, so the checker cannot tell `co.uk` from `example.com`
+and refuses to guess. The rule itself is `vendor-domain.mjs`, canonical in the
+`agent-dns` repository and vendored here byte-identically; re-vendor, never
+edit the copy.
 
 **Prices are whole minor units with a currency.** `{ "amount": 2500,
 "currency": "GBP" }`. A float is refused, a bare number is refused, an amount
@@ -62,9 +68,11 @@ suite asserts every vector fails for exactly its rule and no other.
 |---|---|
 | `SPEC.md` | The specification: shape, field rules, refusals, serving and fetch rules, composition, what version 1 leaves out |
 | `schema/agent-1.json` | JSON Schema, draft 2020-12. Structural; the cross-field rules live in the checker |
-| `vendor-agent.mjs` | The canonical checker and consumer. `validate(doc)`, `fetchDocument(domain)`, and the CLI. Copied byte-identical wherever it travels |
+| `vendor-agent.mjs` | The canonical checker and consumer. `validate(doc)`, `fetchDocument(domain)`, and the CLI. Copied byte-identical wherever it travels, together with the next file |
+| `vendor-domain.mjs` | The same-domain rule (`normalizeDomain`, `isSameDomain`, `sameDomainUrl`). **Not canonical here** — a byte-identical copy of `agent-dns/vendor-domain.mjs`; re-vendor, never edit |
 | `vectors/` | The conformance corpus: `*-valid.json` must pass; every other file is named for the one rule that refuses it |
 | `test/agent.test.mjs` | `node --test`: the corpus behaves, every rule is provoked through the real validator, the fetch rules run against an injected fetch, the schema and the checker agree |
+| `test/vendor-drift.test.mjs` | Compares `vendor-domain.mjs` to the agent-dns canon byte for byte when that repository is checked out beside this one; reports unknown, not passed, when it is not |
 | `scripts/lint.mjs` | Syntax-checks every `.mjs`, parses every `.json`, holds the brand-neutrality rule and the licence line |
 | `CLAUDE.md` | What makes this repository different, for an agent working in it |
 

@@ -54,7 +54,7 @@ for (const f of json) {
 
 // Brand neutrality, applied to the format and nothing else. The README and
 // CLAUDE.md may say where the licence register lives; the format may not.
-const FORMAT_FILES = ['SPEC.md', 'vendor-agent.mjs', 'schema/agent-1.json', ...files.filter((f) => rel(f).startsWith('vectors/')).map(rel)]
+const FORMAT_FILES = ['SPEC.md', 'vendor-agent.mjs', 'vendor-domain.mjs', 'schema/agent-1.json', ...files.filter((f) => rel(f).startsWith('vectors/')).map(rel)]
 export const BRAND_WORDS = ['magician', 'claimyour', 'flashy gold', 'flashy labs', 'flashylabs', 'flashy network', 'flashyid', 'gda.capital', 'gord.holdings', 'flashy group']
 for (const name of FORMAT_FILES) {
   const text = readFileSync(join(ROOT, name), 'utf8').toLowerCase()

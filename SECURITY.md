@@ -25,8 +25,8 @@ The checker (`vendor-agent.mjs`), the consumer fetch rules it implements, the
 schema and the vectors. Of particular interest:
 
 - a document the checker **accepts** that sends an agent somewhere the rules
-  say it must not — an http endpoint, another registrable domain, a URL with
-  userinfo;
+  say it must not — an http endpoint, a host that is not the document's
+  `domain` or a subdomain of it, a URL with userinfo;
 - a consumer path that **follows** a redirect the rules say it must refuse,
   or reads past the size cap;
 - a way to make `absent` and `unreachable` read the same.

@@ -14,11 +14,19 @@ every vector for a denylist of estate brand words and fails on any hit;
 contract names (`flashyos/1`, `frontdoor/1`, `directory/1`, `delegation/1`)
 are vocabulary and are allowed.
 
-**`vendor-agent.mjs` is the canonical copy.** Elsewhere in the estate a file
-named `vendor-*.mjs` is a copy of something in flashyos; here it is the
-source. It imports `node:fs` and `node:url` and nothing else, so it travels by
-byte-identical copy and runs before an install. Change it here; copies
-elsewhere are re-vendored, never edited.
+**`vendor-agent.mjs` is the canonical copy; `vendor-domain.mjs` is not.**
+Elsewhere in the estate a file named `vendor-*.mjs` is a copy of something in
+flashyos; here `vendor-agent.mjs` is the source. It imports `node:fs`,
+`node:url` and `./vendor-domain.mjs` and nothing else, so the pair travels by
+byte-identical copy and runs before an install. Change `vendor-agent.mjs`
+here; copies elsewhere are re-vendored, never edited. `vendor-domain.mjs` is
+the other way round: it is the same-domain rule, canonical in the `agent-dns`
+repository, vendored here byte-identically, and `test/vendor-drift.test.mjs`
+compares it against that canon when agent-dns is checked out beside this
+repository (unknown, not passed, when it is not). Change it *there*, then
+re-vendor here. It replaced a "last two labels" slice this file used to carry,
+which read `acme.co.uk` and `other.co.uk` as one publisher — the third
+implementation of one rule across specifications built to interoperate.
 
 **Discovery only.** No negotiation, no execution semantics, no settlement, no
 identity proof, no DNS material. Anything that reads like one of those is a
@@ -37,9 +45,14 @@ node vendor-agent.mjs fetch <domain>        # the consumer rules against a live 
 
 - **Capabilities are verbs.** `^[a-z][a-z0-9-]*$` plus the eight-word
   department denylist, refused by name. The test iterates the whole denylist.
-- **Same registrable domain.** Every endpoint, and the `handshake` and
-  `frontdoor` links, share the document's registrable domain under the exact
-  rule in `SPEC.md` § 2. `registrableDomain()` is pinned case by case.
+- **Same domain means `domain` or a subdomain of it.** Every endpoint, and
+  the `handshake` and `frontdoor` links, sit on the document's `domain` or a
+  subdomain of it under the rule in `SPEC.md` § 2 — a parent, a sibling and a
+  `co.uk` neighbour are each refused as `cross-domain-endpoint`, and a test
+  asserts the label-slice rule (`registrableDomain`, `slice(-2)`) is gone
+  from the checker. `isSameDomain` is imported from `vendor-domain.mjs`,
+  never restated. The well-known path is `/.well-known/agent` only; a test
+  asserts the `.json` spelling is never requested.
 - **Prices are whole minor units with a currency.** Floats, strings,
   negatives, bare numbers and missing currencies are each refused; a price
   with no `payment` section is refused.
@@ -53,8 +66,8 @@ node vendor-agent.mjs fetch <domain>        # the consumer rules against a live 
   to its basename. A vector that fails for two reasons is a mislabelled
   vector.
 - **The consumer keeps `absent` and `unreachable` apart**, follows redirects
-  only within the registrable domain and only over https, and never requests
-  the refused target. Tested with an injected fetch; nothing here touches the
+  only to the fetched domain or a subdomain of it and only over https, and
+  never requests the refused target. Tested with an injected fetch; nothing here touches the
   network under test.
 - **The corpus is non-empty on both sides.** A walk that finds no vectors
   reads exactly like a clean one, so the count is asserted.

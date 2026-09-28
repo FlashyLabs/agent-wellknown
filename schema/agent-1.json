@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "agent/1 — the discovery document at /.well-known/agent",
-  "description": "Structural schema for agent/1. Necessary but not sufficient: the cross-field rules (every endpoint, the handshake and the frontdoor share the document's registrable domain; a priced capability requires a payment section; policies.humanApprovalFor names declared capabilities; capability ids are unique; auth and payment methods are unique) are enforced by validate() in vendor-agent.mjs. Keys prefixed x- are carried and never checked, at every level — the format's one extension convention.",
+  "description": "Structural schema for agent/1. Necessary but not sufficient: the cross-field rules (every endpoint, the handshake and the frontdoor sit on the document's domain or a subdomain of it — the same-domain rule of vendor-domain.mjs, never a registrable-domain guess; a priced capability requires a payment section; policies.humanApprovalFor names declared capabilities; capability ids are unique; auth and payment methods are unique) are enforced by validate() in vendor-agent.mjs. Keys prefixed x- are carried and never checked, at every level — the format's one extension convention.",
   "type": "object",
   "required": ["contract", "domain", "org", "accountable", "updated", "capabilities", "auth"],
   "properties": {
@@ -9,7 +9,7 @@
     "domain": {
       "type": "string",
       "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
-      "description": "The lowercase hostname this document is served from. No scheme, no path, no port. Every endpoint must share its registrable domain."
+      "description": "The lowercase hostname this document speaks for. No scheme, no path, no port. Every endpoint host must be this domain or a subdomain of it."
     },
     "org": {
       "type": "string",
@@ -43,11 +43,11 @@
     "policies": { "$ref": "#/$defs/policies" },
     "handshake": {
       "$ref": "#/$defs/httpsUrl",
-      "description": "The organisation's own flashyos/1 handshake, if it publishes one. Same registrable domain (cross-field rule)."
+      "description": "The organisation's own flashyos/1 handshake, if it publishes one. Its host is this document's domain or a subdomain of it (cross-field rule)."
     },
     "frontdoor": {
       "$ref": "#/$defs/httpsUrl",
-      "description": "The organisation's own frontdoor/1 door, if it publishes one. Same registrable domain (cross-field rule)."
+      "description": "The organisation's own frontdoor/1 door, if it publishes one. Its host is this document's domain or a subdomain of it (cross-field rule)."
     }
   },
   "patternProperties": { "^x-": {} },
@@ -111,7 +111,7 @@
         },
         "description": { "type": "string", "pattern": "\\S" },
         "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
-        "endpoint": { "$ref": "#/$defs/httpsUrl", "description": "Where the action lives. https, on this document's registrable domain." },
+        "endpoint": { "$ref": "#/$defs/httpsUrl", "description": "Where the action lives. https, on this document's domain or a subdomain of it." },
         "schema": { "$ref": "#/$defs/httpsUrl", "description": "The request/response schema for this endpoint." },
         "price": { "$ref": "#/$defs/price" }
       },

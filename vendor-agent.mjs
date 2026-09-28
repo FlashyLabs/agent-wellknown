@@ -3,7 +3,10 @@
 //
 // This file is the CANONICAL copy. It travels by byte-identical copy into any
 // repository that serves or consumes an agent/1 document, which is why it
-// imports nothing but `node:` builtins and runs before an install.
+// imports nothing but `node:` builtins and one sibling — `./vendor-domain.mjs`,
+// the same-domain rule, canonical in the agent-dns repository and vendored
+// here byte-identically (test/vendor-drift.test.mjs) — and runs before an
+// install. The two files travel together.
 //
 // What the format says, in one breath: a human sees company.com; an agent
 // fetches https://company.com/.well-known/agent and learns who is accountable,
@@ -23,7 +26,9 @@
 //   float-price               0.1 + 0.2 is not 0.3; money is whole minor units
 //   no-currency               2500 of WHAT
 //   cross-domain-endpoint     a document may not point agents at another
-//                             company's endpoints
+//                             company's endpoints — an endpoint host is the
+//                             document's `domain` or a subdomain of it, and
+//                             nothing here guesses at a public suffix
 //   unknown-key               a field the checker does not know is a field it
 //                             cannot check; x- is the extension convention
 //
@@ -32,18 +37,22 @@
 //   node vendor-agent.mjs fetch <domain>          fetch and validate the way a stranger would
 //
 // `fetch` follows the consumer rules in SPEC.md § Discovery: https only, a
-// timeout, a size cap, redirects only within the same registrable domain, and
-// `absent` (the host answered 404) is a different finding from `unreachable`
-// (the host did not answer). Conflating those two turns an outage into a
-// claim that an organisation has no agent interface.
+// timeout, a size cap, redirects only to the fetched domain or a subdomain of
+// it, and `absent` (the host answered 404) is a different finding from
+// `unreachable` (the host did not answer). Conflating those two turns an
+// outage into a claim that an organisation has no agent interface.
 
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
+import { isSameDomain, normalizeDomain } from './vendor-domain.mjs'
+
+export { isSameDomain, normalizeDomain, sameDomainUrl } from './vendor-domain.mjs'
+
 export const CONTRACT = 'agent/1'
 
-/** Where a consumer looks, in order. The first is canonical; the second is accepted. */
-export const WELL_KNOWN_PATHS = ['/.well-known/agent', '/.well-known/agent.json']
+/** Where a consumer looks. One path, no alternate spelling. */
+export const WELL_KNOWN_PATH = '/.well-known/agent'
 
 /** The consumer's fetch rules. Stated once, exported so nobody retypes them. */
 export const FETCH_DEFAULTS = Object.freeze({
@@ -102,15 +111,14 @@ export const PLACEHOLDER_EMAIL = 'you@example.com'
 
 const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/
 
-/**
- * Second-level labels under which a third label is the registrable one when
- * the top-level label is a two-letter country code: example.co.uk registers
- * `example`, not `co`. This is NOT the Public Suffix List — a dependency-free
- * checker cannot carry one and stay current. The rule is exact and stated so
- * that two implementations agree; when a domain sits under a suffix this list
- * does not know, put the endpoints on the same host as the document.
- */
-export const MULTI_LABEL_SLDS = Object.freeze(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ltd', 'plc', 'sch', 'nhs'])
+// The same-domain rule — `isSameDomain(host, domain)`: `host` is `domain` or a
+// subdomain of it, and nothing else. It is NOT "same registrable domain": a
+// dependency-free checker cannot carry the Public Suffix List, and the label
+// slice this file once used instead read `acme.co.uk` and `other.co.uk` as one
+// publisher. The rule lives in ./vendor-domain.mjs, canonical in agent-dns, and
+// is imported rather than restated so every format that asks the question
+// gets the same answer. A publisher whose endpoints sit on a sibling host puts
+// `domain` at the parent both share and serves the document for it.
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const isString = (v) => typeof v === 'string' && v.trim().length > 0
@@ -118,22 +126,6 @@ const isString = (v) => typeof v === 'string' && v.trim().length > 0
 /** True for a lowercase DNS hostname with at least two labels and an alphabetic top-level label. IP literals fail. */
 export function isHostname(s) {
   return typeof s === 'string' && HOSTNAME.test(s)
-}
-
-/**
- * The registrable domain of a hostname under the rule above, or null when the
- * input is not a hostname. `api.example.com` → `example.com`;
- * `shop.example.co.uk` → `example.co.uk`; `example.com` → `example.com`.
- */
-export function registrableDomain(host) {
-  if (typeof host !== 'string') return null
-  const h = host.toLowerCase().replace(/\.$/, '')
-  if (!isHostname(h)) return null
-  const labels = h.split('.')
-  const tld = labels[labels.length - 1]
-  const sld = labels[labels.length - 2]
-  if (labels.length >= 3 && tld.length === 2 && MULTI_LABEL_SLDS.includes(sld)) return labels.slice(-3).join('.')
-  return labels.slice(-2).join('.')
 }
 
 /**
@@ -156,18 +148,24 @@ export function parseHttpsUrl(s) {
   return { url }
 }
 
-/** True when `to` (resolved against `from`) stays https and inside `from`'s registrable domain. */
-export function redirectAllowed(from, location) {
+/**
+ * True when `location` (resolved against `from`) stays https, carries no
+ * userinfo or explicit port, and its host is `domain` or a subdomain of it.
+ * `domain` defaults to `from`'s own host; the consumer passes the domain it
+ * is fetching for, so every hop is measured against the same domain rather
+ * than against the previous hop.
+ */
+export function redirectAllowed(from, location, domain) {
   let to
+  let base
   try {
-    to = new URL(location, from)
+    base = new URL(from)
+    to = new URL(location, base)
   } catch {
     return false
   }
   if (to.protocol !== 'https:' || to.username || to.password || to.port) return false
-  const a = registrableDomain(new URL(from).hostname)
-  const b = registrableDomain(to.hostname)
-  return a !== null && a === b
+  return isSameDomain(to.hostname, domain ?? base.hostname)
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +197,7 @@ function checkPrice(price, path, err) {
   if (per !== undefined && !isString(per)) err('bad-field', `${path}.per`, 'must be a non-empty string naming the unit priced (request, minute, item)')
 }
 
-function checkCapability(cap, i, docRegistrable, err) {
+function checkCapability(cap, i, docDomain, err) {
   const path = `capabilities[${i}]`
   if (!isObject(cap)) {
     err('bad-field', path, 'must be an object')
@@ -223,8 +221,8 @@ function checkCapability(cap, i, docRegistrable, err) {
     if (parsed.problem) {
       const rule = typeof endpoint === 'string' && /^http:/i.test(endpoint) ? 'http-endpoint' : 'bad-endpoint'
       err(rule, `${path}.endpoint`, parsed.problem)
-    } else if (docRegistrable && registrableDomain(parsed.url.hostname) !== docRegistrable) {
-      err('cross-domain-endpoint', `${path}.endpoint`, `is on ${registrableDomain(parsed.url.hostname)}, and this document speaks for ${docRegistrable} — a document may not point agents at another company's endpoints`)
+    } else if (docDomain && !isSameDomain(parsed.url.hostname, docDomain)) {
+      err('cross-domain-endpoint', `${path}.endpoint`, `is on ${parsed.url.hostname}, which is not ${docDomain} or a subdomain of it — a document may not point agents at another company's endpoints`)
     }
   }
 
@@ -322,14 +320,14 @@ function checkPolicies(p, capabilityIds, err) {
   }
 }
 
-function checkOwnLink(value, key, docRegistrable, err) {
+function checkOwnLink(value, key, docDomain, err) {
   const parsed = parseHttpsUrl(value)
   if (parsed.problem) {
     err('bad-field', key, parsed.problem)
     return
   }
-  if (docRegistrable && registrableDomain(parsed.url.hostname) !== docRegistrable) {
-    err('cross-domain-endpoint', key, `is on ${registrableDomain(parsed.url.hostname)}, and this document speaks for ${docRegistrable} — an organisation links its OWN ${key}`)
+  if (docDomain && !isSameDomain(parsed.url.hostname, docDomain)) {
+    err('cross-domain-endpoint', key, `is on ${parsed.url.hostname}, which is not ${docDomain} or a subdomain of it — an organisation links its OWN ${key}`)
   }
 }
 
@@ -337,9 +335,9 @@ function checkOwnLink(value, key, docRegistrable, err) {
  * Validate an agent/1 document.
  *
  * @param {unknown} doc            the parsed JSON
- * @param {{ domain?: string }} [opts]  when set, the hostname the document was
- *                                 fetched from; its registrable domain must
- *                                 match the document's own `domain`
+ * @param {{ domain?: string }} [opts]  when set, the domain the consumer asked
+ *                                 for; the document's own `domain` must be
+ *                                 that domain or a subdomain of it
  * @returns {{ valid: boolean, errors: Array<{ rule: string, path: string, message: string }> }}
  */
 export function validate(doc, opts = {}) {
@@ -360,15 +358,14 @@ export function validate(doc, opts = {}) {
 
   if ('contract' in doc && doc.contract !== CONTRACT) err('wrong-contract', '$.contract', `must be "${CONTRACT}", got ${JSON.stringify(doc.contract)}`)
 
-  let docRegistrable = null
+  let docDomain = null
   if ('domain' in doc) {
     if (!isHostname(doc.domain)) {
       err('bad-domain', '$.domain', 'must be a lowercase DNS hostname with no scheme, path or port — the host this document is served from')
     } else {
-      docRegistrable = registrableDomain(doc.domain)
-      if (opts.domain !== undefined) {
-        const fetched = registrableDomain(opts.domain)
-        if (fetched !== docRegistrable) err('domain-mismatch', '$.domain', `says ${doc.domain}, but the document was fetched from ${opts.domain} — a document speaks only for the host that serves it`)
+      docDomain = normalizeDomain(doc.domain)
+      if (opts.domain !== undefined && !isSameDomain(docDomain, opts.domain)) {
+        err('domain-mismatch', '$.domain', `says ${doc.domain}, but the document was fetched for ${opts.domain} — a document speaks only for the domain it was asked for, or a subdomain of it`)
       }
     }
   }
@@ -401,7 +398,7 @@ export function validate(doc, opts = {}) {
       err('no-capabilities', '$.capabilities', 'must be a non-empty array — a document that offers nothing is a business card')
     } else {
       doc.capabilities.forEach((cap, i) => {
-        const id = checkCapability(cap, i, docRegistrable, err)
+        const id = checkCapability(cap, i, docDomain, err)
         if (id !== null) {
           if (capabilityIds.has(id)) err('duplicate-capability', `capabilities[${i}].id`, `"${id}" is declared twice`)
           capabilityIds.add(id)
@@ -420,8 +417,8 @@ export function validate(doc, opts = {}) {
   }
 
   if ('policies' in doc) checkPolicies(doc.policies, capabilityIds, err)
-  if ('handshake' in doc) checkOwnLink(doc.handshake, 'handshake', docRegistrable, err)
-  if ('frontdoor' in doc) checkOwnLink(doc.frontdoor, 'frontdoor', docRegistrable, err)
+  if ('handshake' in doc) checkOwnLink(doc.handshake, 'handshake', docDomain, err)
+  if ('frontdoor' in doc) checkOwnLink(doc.frontdoor, 'frontdoor', docDomain, err)
 
   return { valid: errors.length === 0, errors }
 }
@@ -453,7 +450,7 @@ async function readCapped(res, maxBytes) {
   return { text: Buffer.concat(chunks).toString('utf8') }
 }
 
-async function fetchOne(startUrl, f, { timeoutMs, maxBytes, maxRedirects }) {
+async function fetchOne(startUrl, domain, f, { timeoutMs, maxBytes, maxRedirects }) {
   let url = startUrl
   for (let hops = 0; ; hops++) {
     let res
@@ -471,7 +468,7 @@ async function fetchOne(startUrl, f, { timeoutMs, maxBytes, maxRedirects }) {
       const location = res.headers.get('location')
       if (!location) return { finding: 'refused', url, reason: `redirect (${status}) with no location` }
       if (hops >= maxRedirects) return { finding: 'refused', url, reason: `more than ${maxRedirects} redirects` }
-      if (!redirectAllowed(url, location)) return { finding: 'refused', url, reason: `redirect to ${location} leaves https or the registrable domain — not followed` }
+      if (!redirectAllowed(url, location, domain)) return { finding: 'refused', url, reason: `redirect to ${location} leaves https or ${domain} and its subdomains — not followed` }
       url = new URL(location, url).href
       continue
     }
@@ -493,8 +490,8 @@ async function fetchOne(startUrl, f, { timeoutMs, maxBytes, maxRedirects }) {
  * Fetch and validate a domain's agent/1 document under the consumer rules.
  *
  * Findings, which a consumer must keep apart:
- *   found        200 + JSON at one of the well-known paths; `valid`/`errors` say whether it validates
- *   absent       every well-known path answered 404 or 410 — the host has no agent interface
+ *   found        200 + JSON at the well-known path; `valid`/`errors` say whether it validates
+ *   absent       the well-known path answered 404 or 410 — the host has no agent interface
  *   unreachable  the host did not answer (DNS, TCP, TLS, timeout) — says nothing about the host's intent
  *   refused      the consumer stopped: redirect off-domain or off-https, too many redirects, oversize, not JSON
  *   error        any other HTTP status
@@ -505,20 +502,12 @@ export async function fetchDocument(domain, opts = {}) {
   const { fetch: f = globalThis.fetch, ...rest } = opts
   const settings = { ...FETCH_DEFAULTS, ...rest }
   if (!isHostname(domain)) return { finding: 'refused', reason: `${JSON.stringify(domain)} is not a hostname` }
-  let last = null
-  for (const path of WELL_KNOWN_PATHS) {
-    const r = await fetchOne(`https://${domain}${path}`, f, settings)
-    if (r.finding === 'absent') {
-      last = r
-      continue
-    }
-    if (r.finding === 'found') {
-      const { valid, errors } = validate(r.doc, { domain })
-      return { ...r, valid, errors }
-    }
-    return r
+  const r = await fetchOne(`https://${domain}${WELL_KNOWN_PATH}`, domain, f, settings)
+  if (r.finding === 'found') {
+    const { valid, errors } = validate(r.doc, { domain })
+    return { ...r, valid, errors }
   }
-  return last
+  return r
 }
 
 // ---------------------------------------------------------------------------
