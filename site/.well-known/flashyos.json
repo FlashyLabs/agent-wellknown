@@ -1,0 +1,14 @@
+{
+  "mesh": "flashyos/1",
+  "org": {
+    "slug": "agent-wellknown",
+    "name": "Agent Wellknown",
+    "profile": "https://app.flashyos.com/org/agent-wellknown"
+  },
+  "capabilities": [
+    "content-exchange"
+  ],
+  "wants": "https://api.flashyos.com/api/v1/network/roadmap",
+  "api": "https://api.flashyos.com",
+  "join": "https://flashyos.com/join"
+}

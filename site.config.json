@@ -1,0 +1,62 @@
+{
+  "property": "agent-wellknown",
+  "domain": null,
+  "title": "agent/1 — the discovery document at /.well-known/agent",
+  "pitch": "agent/1 is the vendor-neutral discovery document at /.well-known/agent through which a website, API or company exposes an authenticated, discoverable, payable machine interface to agents — and through which agents find one.",
+  "layer": "gateway",
+  "contract": "agent/1",
+  "accent": "--flashy-mint",
+  "refusals": [
+    {
+      "title": "Capabilities are verbs",
+      "body": "quote, book, refund — never sales, support, finance. A department tells an agent who to talk to; an action tells it what it can do. The id rule is a lower-case verb plus a denylist of eight department words, refused by name rather than by taste."
+    },
+    {
+      "title": "Endpoints stay on the organisation's own domain",
+      "body": "Every endpoint's host must be the document's domain or a subdomain of it — never a parent, a sibling or a stranger. A document may not point agents at another company's endpoints, whatever the arrangement between them; the other company publishes its own document."
+    },
+    {
+      "title": "Prices are whole minor units with a currency",
+      "body": "An amount of 2500 with a currency of GBP is twenty-five pounds. A float is refused, a bare number is refused, an amount with no currency is refused, and a price with no way to pay is refused."
+    },
+    {
+      "title": "An accountable human is required",
+      "body": "A name and a mailbox somebody reads. The template placeholder is refused. An interface nobody answers for is one nobody can be asked to stop."
+    },
+    {
+      "title": "The checker refuses; it does not guess",
+      "body": "Unknown keys are refused unless x- prefixed. Each refusal has a vector named for it, and the suite asserts every vector fails for exactly its rule and no other."
+    }
+  ],
+  "faq": [
+    {
+      "q": "What does the checker refuse?",
+      "a": "A capability id that is a department word rather than a verb; an endpoint on a domain other than the document's own or a subdomain of it; a float price, a bare number, or a price with no payment method; a missing accountable human or the template placeholder; and unknown keys that are not x- prefixed. Every refusal has a vector named for it."
+    },
+    {
+      "q": "Where does this sit in Web 4?",
+      "a": "The gateway layer — 'how do I connect to the old web?'. A human sees company.com; an agent fetches one file and learns who is accountable, what it may do, where each action lives, what it costs and how to pay. The stack page and the Web 4 hub show where it sits among the nine layers."
+    },
+    {
+      "q": "Is this a standard yet?",
+      "a": "No. agent/1 is draft. No organisation outside the repositories that wrote it has been verified serving a document, and that number is printed rather than rounded up; the first independent adopter is the gate before the word standard."
+    },
+    {
+      "q": "How is a document located from a domain?",
+      "a": "By agent-dns/1: one DNS TXT record at _agent.<domain> points at the domain's agent/1 document. DNS points; the document describes. agent-dns/1 is a sibling spec and is not redefined here."
+    },
+    {
+      "q": "Why are prices whole minor units?",
+      "a": "Because a float is where money quietly loses a penny. An amount of 2500 in GBP is twenty-five pounds with no rounding to argue about, and a price with no way to pay is refused as useless to the agent reading it."
+    },
+    {
+      "q": "Is the gateway service part of this repository?",
+      "a": "No. This is the open protocol half — the format, schema, checker and vectors. A commercial service that fronts sites which publish nothing is a separate repository and is never named here; the format is brand-neutral by rule, and a lint enforces it."
+    }
+  ],
+  "links": {
+    "hub": "https://github.com/FlashyLabs/web4",
+    "spec": "https://github.com/FlashyLabs/agent-wellknown",
+    "repo": "https://github.com/FlashyLabs/agent-wellknown"
+  }
+}

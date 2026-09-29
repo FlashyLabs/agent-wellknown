@@ -1,5 +1,7 @@
 # agent-wellknown
 
+<img src="brand/assets/bolt-gold.svg" width="48" alt="">
+
 `agent/1` is the vendor-neutral discovery document at `/.well-known/agent`,
 for any website, API or company that wants to expose an authenticated,
 discoverable, payable machine interface to agents — and for the agents that
@@ -86,6 +88,19 @@ Sibling standards, by name — each is its own repository and its own question:
 - `delegation/1` — the verifiable chain of attenuated authority `agent/1` names as an auth method
 - `agent-dns/1` — how the document's domain is located from a DNS record
 - `frontdoor/1`, `directory/1`, `flashyos/1` — the formats `agent/1` composes with rather than restates (`SPEC.md` § 5)
+
+## Where it sits in the stack
+
+`agent/1` is a gateway layer of Web 4 — the agentic internet as a stack of open
+protocols. The human map of the whole stack is
+[web4](https://github.com/FlashyLabs/web4); its machine twin is
+[stack.json](https://github.com/FlashyLabs/stack.json), served at
+`/.well-known/stack.json`. This repository serves its own institutional front
+door — the same config-driven, dependency-free door every protocol repository in
+the estate serves — generated into `site/` by `node scripts/build-site.mjs` from
+`site.config.json` and its vendored inputs. It is committed here and, once
+deployed, is served at `https://flashylabs.github.io/agent-wellknown/`
+(committed as of 2026-09-29, not yet fetched).
 
 ## Status
 
