@@ -18,6 +18,7 @@ import { join, dirname, relative, sep } from 'node:path';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from '../scripts/build-site.mjs';
+import { emitAgent } from '../scripts/emit-agent.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = join(ROOT, 'site');
@@ -31,9 +32,13 @@ function walk(dir) {
 const read = (p) => readFileSync(p, 'utf8');
 const relPosix = (base, p) => relative(base, p).split(sep).join('/');
 
-// Build once into a temp directory; every test reads it.
+// Build once into a temp directory; every test reads it. The property's build
+// is the vendored web4 generator PLUS this repository's own agent/1 emit, which
+// dogfoods the format by serving the property's own discovery document — so the
+// committed site/ must reproduce both, byte for byte.
 const OUT = mkdtempSync(join(tmpdir(), 'web4-site-'));
 build(OUT);
+emitAgent(OUT);
 process.on('exit', () => rmSync(OUT, { recursive: true, force: true }));
 
 const pages = walk(SITE).filter((p) => p.endsWith('.html'));

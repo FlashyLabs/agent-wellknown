@@ -63,7 +63,7 @@ for (const name of FORMAT_FILES) {
   }
 }
 
-const README_LAST = 'Licence: to be declared at launch. The estate licence register in flashyos governs; this repository is not yet open-sourced.'
+const README_LAST = 'Licensed under Apache-2.0 (holder Flashy Labs); the estate register in flashyos `tools/estate-licences.mjs` is the authority.'
 const readme = readFileSync(join(ROOT, 'README.md'), 'utf8').trimEnd().split('\n')
 if (readme[readme.length - 1] !== README_LAST) problems.push('README.md: the final line must be the licence line, verbatim')
 

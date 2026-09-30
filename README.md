@@ -109,4 +109,4 @@ disagree with; no organisation outside the repositories that wrote it has been
 verified serving a document, and that number is printed rather than rounded
 up.
 
-Licence: to be declared at launch. The estate licence register in flashyos governs; this repository is not yet open-sourced.
+Licensed under Apache-2.0 (holder Flashy Labs); the estate register in flashyos `tools/estate-licences.mjs` is the authority.

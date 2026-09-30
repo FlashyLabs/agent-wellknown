@@ -1,0 +1,27 @@
+{
+  "contract": "agent/1",
+  "domain": "flashylabs.github.io",
+  "org": "org/agent-wellknown",
+  "accountable": {
+    "name": "Michael Gord",
+    "email": "michael@gda.capital"
+  },
+  "updated": "2026-09-30",
+  "capabilities": [
+    {
+      "id": "get-schema",
+      "description": "Retrieve the canonical agent/1 JSON Schema this repository publishes.",
+      "method": "GET",
+      "endpoint": "https://flashylabs.github.io/agent-wellknown/agent-1.json",
+      "schema": "https://json-schema.org/draft/2020-12/schema"
+    }
+  ],
+  "auth": [
+    {
+      "method": "none"
+    }
+  ],
+  "handshake": "https://flashylabs.github.io/agent-wellknown/.well-known/flashyos.json",
+  "x-served-at": "https://flashylabs.github.io/agent-wellknown/.well-known/agent",
+  "x-status": "draft — dogfood; no independent adopter is verified serving agent/1 yet"
+}
